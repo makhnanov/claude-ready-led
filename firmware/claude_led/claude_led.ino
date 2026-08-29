@@ -9,6 +9,7 @@
  *   /blink    — мигание, ?times=3&ms=200
  *   /done     — 3 быстрых мигания и остаться гореть (работа закончена)
  *   /status   — JSON с текущим состоянием
+ *   /         — веб-страничка: кнопки шлют fetch, ответ рисуется без перезагрузки
  *
  * Схема: D6 --[резистор 220..330 Ом]-- анод(+, длинная ножка) LED, катод -- GND.
  */
@@ -72,17 +73,90 @@ String statusJson() {
 
 void reply() { server.send(200, "application/json; charset=utf-8", statusJson()); }
 
+// Страничка целиком лежит во flash (PROGMEM) и отдаётся через send_P —
+// в RAM она не копируется. Статус страница добирает сама через fetch("/status").
+static const char PAGE_HTML[] PROGMEM = R"HTML(<!doctype html>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>claude-led</title>
+<style>
+:root{--bg:#14110f;--fg:#f0eee6;--dim:#8f8880;--card:#221e1b;--accent:#c96442;
+      --err:#e06c5a;--off:#2a2521;--edge:#3a332e;--glow:#ffd479}
+@media(prefers-color-scheme:light){
+  :root{--bg:#faf9f5;--fg:#1a1815;--dim:#6b645c;--card:#ebe8e1;--off:#e2ded6;--edge:#cdc7bd}
+}
+*{box-sizing:border-box}
+body{margin:0;min-height:100vh;display:flex;flex-direction:column;align-items:center;
+     justify-content:center;gap:22px;padding:24px;background:var(--bg);color:var(--fg);
+     font:16px/1.5 system-ui,-apple-system,Segoe UI,sans-serif}
+h1{margin:0;font-size:19px;font-weight:600}
+#lamp{width:88px;height:88px;border-radius:50%;background:var(--off);
+      border:2px solid var(--edge);transition:background .25s,box-shadow .25s}
+#lamp.on{background:var(--glow);border-color:var(--glow);box-shadow:0 0 34px 6px #ffd47990}
+#lamp.pulse{animation:br 2s ease-in-out infinite}
+#lamp.blink{animation:bl .24s steps(1) infinite}
+#lamp.err{background:#3a1f1c;border-color:var(--err);box-shadow:none}
+@keyframes br{0%,100%{background:var(--off);box-shadow:none}
+              50%{background:var(--glow);box-shadow:0 0 34px 6px #ffd47990}}
+@keyframes bl{0%{background:var(--glow);box-shadow:0 0 30px 6px #ffd47980}
+              50%{background:var(--off);box-shadow:none}}
+.btns{display:grid;grid-template-columns:repeat(3,minmax(94px,1fr));gap:10px;
+      width:100%;max-width:340px}
+button{font:inherit;font-weight:600;padding:14px 6px;border:0;border-radius:10px;
+       background:var(--card);color:var(--fg);cursor:pointer;transition:background .15s}
+button:hover:not(:disabled){background:var(--accent);color:#fff}
+button:disabled{opacity:.45;cursor:progress}
+#out{min-height:3.4em;text-align:center;color:var(--dim);
+     font:13px/1.7 ui-monospace,SFMono-Regular,Menlo,monospace}
+#out b{color:var(--fg)} #out .e{color:var(--err)}
+</style>
+<h1>claude-led</h1>
+<div id="lamp"></div>
+<div class="btns">
+  <button data-a="toggle">TOGGLE</button><button data-a="on">ON</button>
+  <button data-a="off">OFF</button><button data-a="pulse">PULSE</button>
+  <button data-a="blink">BLINK</button><button data-a="done">DONE</button>
+</div>
+<div id="out">&#8230;</div>
+<script>
+var lamp=document.getElementById('lamp'),out=document.getElementById('out'),
+    btns=document.querySelectorAll('button'),busy=false,
+    tok=new URLSearchParams(location.search).get('token');
+
+function url(a){return '/'+a+(tok?'?token='+encodeURIComponent(tok):'')}
+
+function human(s){var h=s/3600|0,m=s%3600/60|0;
+  return h?h+' ч '+m+' мин':(m?m+' мин '+(s%60)+' с':s+' с')}
+
+function draw(d,ms){
+  lamp.className=d.mode;
+  out.innerHTML='режим <b>'+d.mode+'</b> &middot; ответ за '+ms+' мс<br>'+
+                d.ip+' &middot; сигнал '+d.rssi+' dBm &middot; в сети '+human(d.uptime_s);
+}
+
+async function call(a,quiet){
+  if(busy)return; busy=true;
+  if(!quiet)btns.forEach(function(b){b.disabled=true});
+  var t0=performance.now();
+  try{
+    var r=await fetch(url(a),{cache:'no-store'});
+    if(!r.ok)throw new Error('HTTP '+r.status);
+    draw(await r.json(),Math.round(performance.now()-t0));
+  }catch(e){
+    lamp.className='err';
+    out.innerHTML='<span class="e">нет связи с платой</span><br>'+e.message;
+  }finally{
+    busy=false; btns.forEach(function(b){b.disabled=false});
+  }
+}
+
+btns.forEach(function(b){b.addEventListener('click',function(){call(b.dataset.a)})});
+call('status',true);
+setInterval(function(){if(!document.hidden)call('status',true)},2000);
+</script>
+)HTML";
+
 void handleRoot() {
-  String html =
-    "<!doctype html><meta charset=utf-8><meta name=viewport content='width=device-width,initial-scale=1'>"
-    "<title>claude-led</title>"
-    "<style>body{font:16px system-ui;margin:0;display:grid;place-items:center;height:100vh;"
-    "background:#14110f;color:#f0eee6}a{display:block;width:220px;margin:6px;padding:14px;text-align:center;"
-    "border-radius:10px;background:#2a2521;color:#f0eee6;text-decoration:none}a:hover{background:#c96442}"
-    "code{color:#b0aca4}</style><h2>claude-led</h2>"
-    "<div><a href=/toggle>TOGGLE</a><a href=/on>ON</a><a href=/off>OFF</a><a href=/pulse>PULSE</a>"
-    "<a href=/blink>BLINK</a><a href=/done>DONE</a></div><code>" + statusJson() + "</code>";
-  server.send(200, "text/html; charset=utf-8", html);
+  server.send_P(200, PSTR("text/html; charset=utf-8"), PAGE_HTML);
 }
 
 void setup() {
