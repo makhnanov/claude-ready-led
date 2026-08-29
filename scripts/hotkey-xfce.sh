@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Системный хоткей XFCE: Ctrl+T гасит светодиод.
+# Системный хоткей XFCE: Ctrl+T переключает светодиод (погашен -> зажечь, иначе погасить).
 #
 #   hotkey-xfce.sh install     повесить Ctrl+T
 #   hotkey-xfce.sh remove      снять
@@ -15,7 +15,7 @@
 set -euo pipefail
 
 KEY="${KEY:-<Primary>t}"
-ACTION="${ACTION:-off}"
+ACTION="${ACTION:-toggle}"
 CHANNEL="xfce4-keyboard-shortcuts"
 PROP="/commands/custom/$KEY"
 LED_SH="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/led.sh"

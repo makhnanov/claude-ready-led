@@ -3,6 +3,7 @@
  *
  * Светодиод на D6 (GPIO12):
  *   /off      — погасить
+ *   /toggle   — переключить: погашен -> зажечь, иначе погасить
  *   /on       — зажечь ровным светом
  *   /pulse    — плавное дыхание (Claude работает)
  *   /blink    — мигание, ?times=3&ms=200
@@ -79,7 +80,7 @@ void handleRoot() {
     "background:#14110f;color:#f0eee6}a{display:block;width:220px;margin:6px;padding:14px;text-align:center;"
     "border-radius:10px;background:#2a2521;color:#f0eee6;text-decoration:none}a:hover{background:#c96442}"
     "code{color:#b0aca4}</style><h2>claude-led</h2>"
-    "<div><a href=/on>ON</a><a href=/off>OFF</a><a href=/pulse>PULSE</a>"
+    "<div><a href=/toggle>TOGGLE</a><a href=/on>ON</a><a href=/off>OFF</a><a href=/pulse>PULSE</a>"
     "<a href=/blink>BLINK</a><a href=/done>DONE</a></div><code>" + statusJson() + "</code>";
   server.send(200, "text/html; charset=utf-8", html);
 }
@@ -117,6 +118,9 @@ void setup() {
   server.on("/on",     []{ if (!authorized()) return; applyMode(MODE_ON);    reply(); });
   server.on("/off",    []{ if (!authorized()) return; applyMode(MODE_OFF);   reply(); });
   server.on("/pulse",  []{ if (!authorized()) return; applyMode(MODE_PULSE); reply(); });
+  // погашен -> зажечь, в любом другом режиме -> погасить
+  server.on("/toggle", []{ if (!authorized()) return;
+                           applyMode(mode == MODE_OFF ? MODE_ON : MODE_OFF); reply(); });
   server.on("/status", []{ if (!authorized()) return; reply(); });
   server.on("/blink",  []{
     if (!authorized()) return;

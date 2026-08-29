@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Управление светодиодом claude-led.
-# Использование: led.sh on|off|pulse|done|status|blink [times] [ms]
+# Использование: led.sh on|off|toggle|pulse|done|status|blink [times] [ms]
 #
 # Адрес берётся из (по приоритету):
 #   1) переменная окружения CLAUDE_LED_URL
@@ -17,9 +17,9 @@ TOKEN="${CLAUDE_LED_TOKEN:-}"
 
 cmd="${1:-status}"
 case "$cmd" in
-  on|off|pulse|done|status) path="/$cmd" ;;
+  on|off|toggle|pulse|done|status) path="/$cmd" ;;
   blink) path="/blink?times=${2:-3}&ms=${3:-200}" ;;
-  *) echo "usage: $(basename "$0") on|off|pulse|blink|done|status" >&2; exit 2 ;;
+  *) echo "usage: $(basename "$0") on|off|toggle|pulse|blink|done|status" >&2; exit 2 ;;
 esac
 
 [ -n "$TOKEN" ] && path="$path$([[ $path == *\?* ]] && echo '&' || echo '?')token=$TOKEN"

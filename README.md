@@ -1,7 +1,8 @@
 # claude-ready-led
 
-Светодиод на ESP8266, который **дышит, пока Claude Code работает**, и **загорается
-ровным светом, когда он закончил**. Плюс системный хоткей `Ctrl+T`, чтобы погасить.
+Светодиод на ESP8266, который **гаснет, когда Claude Code начал работать**, и
+**загорается, когда он закончил**. Плюс системный хоткей `Ctrl+T`, чтобы переключить
+его вручную.
 
 Железо: NodeMCU v3 (ESP8266) + любой светодиод. Софт: прошивка с HTTP-сервером,
 хуки Claude Code и глобальный хоткей XFCE.
@@ -73,6 +74,7 @@ ping claude-led.local                                    # либо через m
 |---|---|
 | `GET /on` | ровный свет |
 | `GET /off` | погасить |
+| `GET /toggle` | переключить: погашен → зажечь, иначе погасить |
 | `GET /pulse` | плавное «дыхание» — Claude работает |
 | `GET /blink?times=3&ms=200` | мигание |
 | `GET /done` | 3 быстрых мигания и остаться гореть — работа закончена |
@@ -84,7 +86,7 @@ ping claude-led.local                                    # либо через m
 ## CLI
 
 ```bash
-scripts/led.sh on | off | pulse | done | blink 5 100 | status
+scripts/led.sh on | off | toggle | pulse | done | blink 5 100 | status
 ```
 
 Адрес берётся из `CLAUDE_LED_URL`, из `~/.claude-led.conf`, иначе `http://claude-led.local`.
@@ -100,14 +102,17 @@ scripts/led.sh on | off | pulse | done | blink 5 100 | status
 ```json
 "hooks": {
   "UserPromptSubmit": [{ "hooks": [{ "type": "command",
-    "command": "/path/to/scripts/led.sh pulse >/dev/null 2>&1", "timeout": 5 }] }],
+    "command": "/path/to/scripts/led.sh off >/dev/null 2>&1", "timeout": 5 }] }],
   "Stop": [{ "hooks": [{ "type": "command",
     "command": "/path/to/scripts/led.sh done >/dev/null 2>&1", "timeout": 5 }] }]
 }
 ```
 
-- `UserPromptSubmit` — ты отправил промпт, светодиод начинает дышать.
-- `Stop` — Claude закончил отвечать, три мига и ровный свет.
+- `UserPromptSubmit` — ты отправил промпт, Claude начал работать: светодиод гаснет.
+- `Stop` — Claude закончил отвечать: три мига и ровный свет.
+
+То есть **горит = можно забирать результат, погашен = ещё думает**. Если хочется,
+чтобы во время работы он не гас, а плавно дышал, поменяй в хуке `off` на `pulse`.
 
 Вывод глушится в `/dev/null` намеренно: stdout хука `UserPromptSubmit` иначе
 попадает в контекст модели.
@@ -116,7 +121,7 @@ scripts/led.sh on | off | pulse | done | blink 5 100 | status
 
 ---
 
-## Ctrl+T — погасить светодиод
+## Ctrl+T — переключить светодиод
 
 ```bash
 scripts/hotkey-xfce.sh install    # повесить
@@ -127,10 +132,11 @@ scripts/hotkey-xfce.sh remove     # снять
 Вешает глобальный хоткей XFCE через `xfconf`:
 
 ```
-/commands/custom/<Primary>t  ->  /path/to/scripts/led.sh off
+/commands/custom/<Primary>t  ->  /path/to/scripts/led.sh toggle
 ```
 
-Работает во всей системе, применяется сразу и переживает перезагрузку.
+Погашен — зажжётся, горит или дышит — погаснет. Работает во всей системе,
+применяется сразу и переживает перезагрузку.
 
 **Важно:** XFCE перехватывает клавишу глобально, поэтому `Ctrl+T` перестаёт
 доходить до приложений — в браузере больше не откроется новая вкладка, в Claude Code
@@ -147,17 +153,19 @@ KEY='<Primary><Alt>t' scripts/hotkey-xfce.sh install
 KEY='<Super>l' ACTION=pulse scripts/hotkey-xfce.sh install
 ```
 
+Доступные действия: `toggle` (по умолчанию), `on`, `off`, `pulse`, `done`.
+
 ### Не XFCE?
 
 `hotkey-xfce.sh` работает только в XFCE. Аналоги для остальных:
 
 | Окружение | Как повесить |
 |---|---|
-| GNOME | Настройки → Клавиатура → Дополнительные комбинации, команда `led.sh off` |
+| GNOME | Настройки → Клавиатура → Дополнительные комбинации, команда `led.sh toggle` |
 | KDE | Параметры системы → Комбинации клавиш → Особые команды |
-| i3 / sway | `bindsym Control+t exec /path/to/led.sh off` в конфиге |
-| Hyprland | `bind = CTRL, T, exec, /path/to/led.sh off` |
-| голый X11 | `xbindkeys` с `"led.sh off"` + `Control + t` в `~/.xbindkeysrc` |
+| i3 / sway | `bindsym Control+t exec /path/to/led.sh toggle` в конфиге |
+| Hyprland | `bind = CTRL, T, exec, /path/to/led.sh toggle` |
+| голый X11 | `xbindkeys` с `"led.sh toggle"` + `Control + t` в `~/.xbindkeysrc` |
 
 ---
 
@@ -166,7 +174,7 @@ KEY='<Super>l' ACTION=pulse scripts/hotkey-xfce.sh install
 ```
 firmware/claude_led/claude_led.ino   прошивка ESP8266
 firmware/claude_led/secrets.h.example  шаблон WiFi-конфига (secrets.h в .gitignore)
-scripts/led.sh                       CLI: on/off/pulse/blink/done/status
+scripts/led.sh                       CLI: on/off/toggle/pulse/blink/done/status
 scripts/install.sh                   установщик хуков Claude Code
-scripts/hotkey-xfce.sh               глобальный хоткей Ctrl+T
+scripts/hotkey-xfce.sh               глобальный хоткей Ctrl+T (toggle)
 ```

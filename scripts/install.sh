@@ -63,7 +63,7 @@ data     = json.loads(settings.read_text() or "{}")
 hooks    = data.setdefault("hooks", {})
 
 # stdout хука UserPromptSubmit попадает в контекст модели — глушим
-WANTED = {"UserPromptSubmit": "pulse", "Stop": "done"}
+WANTED = {"UserPromptSubmit": "off", "Stop": "done"}
 
 for event, action in WANTED.items():
     command = f"{led} {action} >/dev/null 2>&1"
