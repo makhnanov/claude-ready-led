@@ -1,87 +1,103 @@
 # claude-ready-led
 
-Светодиод на ESP8266, который **гаснет, когда Claude Code начал работать**, и
-**загорается, когда он закончил**. Плюс системный хоткей `Ctrl+T`, чтобы переключить
-его вручную.
+An LED on an ESP8266 that **goes dark when Claude Code starts working** and
+**lights up when it's done**. Plus a system-wide `Ctrl+T` hotkey to toggle it by hand.
 
-Железо: NodeMCU v3 (ESP8266) + любой светодиод. Софт: прошивка с HTTP-сервером,
-хуки Claude Code и глобальный хоткей XFCE.
+**English** ·
+[Русский](docs/README.ru.md) ·
+[简体中文](docs/README.zh-CN.md) ·
+[Español](docs/README.es.md) ·
+[हिन्दी](docs/README.hi.md) ·
+[العربية](docs/README.ar.md) ·
+[Português](docs/README.pt-BR.md) ·
+[Français](docs/README.fr.md) ·
+[Deutsch](docs/README.de.md) ·
+[日本語](docs/README.ja.md) ·
+[한국어](docs/README.ko.md)
+
+<p align="center">
+  <img src="docs/demo.gif" alt="The LED breathing while Claude Code works" width="440">
+  <img src="docs/ui.jpg" alt="Web interface served by the board itself" width="277">
+</p>
+
+Hardware: NodeMCU v3 (ESP8266) and any LED. Software: firmware with a built-in HTTP
+server, Claude Code hooks, and a global XFCE hotkey.
 
 ---
 
-## Установка хука
+## Install the hook
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/makhnanov/claude-ready-led/main/scripts/install.sh | bash
 ```
 
-Клонирует репозиторий в `~/.claude-ready-led`, вписывает хуки в `~/.claude/settings.json`
-(с бэкапом в `settings.json.bak`), сохраняет адрес устройства в `~/.claude-led.conf`
-и проверяет связь. Запускать можно повторно — прежние записи `led.sh` заменяются,
-чужие хуки не трогаются.
+Clones the repo into `~/.claude-ready-led`, writes the hooks into
+`~/.claude/settings.json` (keeping a backup at `settings.json.bak`), stores the device
+address in `~/.claude-led.conf`, and checks that the board answers. Safe to re-run:
+it replaces its own entries and leaves any other hooks alone.
 
-Адрес устройства, если mDNS-имя не резолвится:
+If the mDNS name doesn't resolve, pass the address explicitly:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/makhnanov/claude-ready-led/main/scripts/install.sh \
   | CLAUDE_LED_URL=http://192.168.1.7 bash
 ```
 
-После установки открой в Claude Code `/hooks` (это перечитывает конфиг) или перезапусти его.
+Afterwards open `/hooks` in Claude Code (that reloads the config) or restart it.
 
 ---
 
-## Схема
+## Wiring
 
-`D6` — это `GPIO12`.
+`D6` is `GPIO12`.
 
 ```
-D6 ──[ 220–330 Ом ]──▶| LED ──── GND
-                    анод  катод
-                  (длинная (короткая ножка,
-                   ножка)   срез на ободке)
+D6 ──[ 220–330 Ω ]──▶| LED ──── GND
+                  anode  cathode
+                 (long leg) (short leg,
+                             flat edge on the rim)
 ```
 
-Резистор обязателен: ножка ESP8266 отдаёт максимум ~12 мА.
+The resistor is mandatory: an ESP8266 pin sources about 12 mA at most.
 
 ---
 
-## Прошивка
+## Firmware
 
 ```bash
 cp firmware/claude_led/secrets.h.example firmware/claude_led/secrets.h
-$EDITOR firmware/claude_led/secrets.h          # SSID и пароль, только 2.4 GHz
+$EDITOR firmware/claude_led/secrets.h          # SSID and password, 2.4 GHz only
 
 arduino-cli core install esp8266:esp8266
 arduino-cli compile --fqbn esp8266:esp8266:nodemcuv2 --upload -p /dev/ttyUSB0 firmware/claude_led
 ```
 
-`secrets.h` в `.gitignore` — пароль от WiFi в репозиторий не попадает.
-В git лежит только `secrets.h.example` с плейсхолдерами.
+`secrets.h` is in `.gitignore`, so your Wi-Fi password never reaches the repository.
+Only `secrets.h.example` with placeholders is tracked.
 
-Узнать выданный IP:
+Find the assigned IP:
 
 ```bash
-arduino-cli monitor -p /dev/ttyUSB0 -c baudrate=115200   # плата печатает IP при старте
-ping claude-led.local                                    # либо через mDNS
+arduino-cli monitor -p /dev/ttyUSB0 -c baudrate=115200   # the board prints its IP on boot
+ping claude-led.local                                    # or via mDNS
 ```
 
 ---
 
 ## HTTP API
 
-| Запрос | Что делает |
+| Request | Effect |
 |---|---|
-| `GET /on` | ровный свет |
-| `GET /off` | погасить |
-| `GET /toggle` | переключить: погашен → зажечь, иначе погасить |
-| `GET /pulse` | плавное «дыхание» — Claude работает |
-| `GET /blink?times=3&ms=200` | мигание |
-| `GET /done` | 3 быстрых мигания и остаться гореть — работа закончена |
-| `GET /status` | JSON: режим, IP, RSSI, аптайм |
-| `GET /` | веб-интерфейс (см. ниже) |
+| `GET /on` | steady light |
+| `GET /off` | turn off |
+| `GET /toggle` | toggle: dark → light, anything else → dark |
+| `GET /pulse` | smooth breathing — Claude is working |
+| `GET /blink?times=3&ms=200` | blink |
+| `GET /done` | 3 quick blinks, then stay lit — work finished |
+| `GET /status` | JSON: mode, IP, RSSI, uptime |
+| `GET /` | web interface (see below) |
 
-Если в `secrets.h` задан `API_TOKEN`, к каждому запросу добавляется `?token=...`.
+If `API_TOKEN` is set in `secrets.h`, every request needs `?token=...`.
 
 ## CLI
 
@@ -89,32 +105,33 @@ ping claude-led.local                                    # либо через m
 scripts/led.sh on | off | toggle | pulse | done | blink 5 100 | status
 ```
 
-Адрес берётся из `CLAUDE_LED_URL`, из `~/.claude-led.conf`, иначе `http://claude-led.local`.
-Скрипт всегда выходит с кодом 0 и не висит дольше 2 секунд — поэтому его безопасно
-вешать на хуки: выключенная или недоступная ESP не тормозит и не ломает Claude Code.
+The address comes from `CLAUDE_LED_URL`, then `~/.claude-led.conf`, then
+`http://claude-led.local`. The script always exits 0 and never blocks for more than
+2 seconds, which is what makes it safe to attach to hooks: an unplugged or unreachable
+board will not slow down or break Claude Code.
 
 ---
 
-## Веб-интерфейс
+## Web interface
 
-Открой в браузере `http://claude-led.local/` — с компьютера или с телефона,
-mDNS работает по всей локальной сети. Плата сама отдаёт страницу с кнопками
-TOGGLE / ON / OFF / PULSE / BLINK / DONE, «лампочкой», повторяющей текущий режим,
-и живым статусом: IP, уровень сигнала, аптайм.
+Open `http://claude-led.local/` in a browser — from your computer or your phone, since
+mDNS works across the whole local network. The board serves a page with TOGGLE / ON /
+OFF / PULSE / BLINK / DONE buttons, a "lamp" mirroring the current mode, and live
+status: IP, signal strength, uptime.
 
-**Кнопки не перезагружают страницу.** Клик отправляет `fetch("/on")`, ответ
-приходит JSON-ом и тут же перерисовывает статус и лампочку. Плюс раз в 2 секунды
-страница сама подтягивает `/status`, так что если светодиод переключили хуком
-Claude Code или с телефона — вкладка это увидит. Опрос останавливается, когда
-вкладка не активна (`document.hidden`), чтобы не долбить плату впустую.
+**Buttons don't reload the page.** A click sends `fetch("/on")`, the JSON response
+comes back and immediately repaints the status and the lamp. On top of that the page
+polls `/status` every 2 seconds, so if the LED is switched by a Claude Code hook or
+from a phone, the tab notices. Polling stops while the tab is hidden
+(`document.hidden`) so the board isn't hammered for nothing.
 
-Если связь пропала, лампочка становится красной и появляется «нет связи с платой» —
-страница не зависает и не молчит.
+If the connection drops, the lamp turns red and "no connection to the board" appears —
+the page never just hangs silently.
 
-### Где лежит код страницы
+### Where the page lives
 
-Отдельного файла нет: у платы нет файловой системы. Вся страница — это одна
-строка C++ в `firmware/claude_led/claude_led.ino`:
+There is no separate file: the board has no filesystem. The whole page is a single C++
+string in `firmware/claude_led/claude_led.ino`:
 
 ```cpp
 static const char PAGE_HTML[] PROGMEM = R"HTML(<!doctype html> ... )HTML";
@@ -124,21 +141,21 @@ void handleRoot() {
 }
 ```
 
-`PROGMEM` кладёт её во flash рядом с кодом, а `send_P` отдаёт прямо оттуда, не
-копируя в оперативку. Именно поэтому статус берётся отдельным запросом `/status`,
-а не подставляется в HTML: страница остаётся статической и ей не нужна RAM на сборку.
-Переход на эту схему освободил около 650 байт из 80 КБ — на микроконтроллере это
-заметная величина.
+`PROGMEM` puts it in flash next to the code and `send_P` streams it straight from
+there without copying into RAM. That is exactly why the status is fetched separately
+via `/status` instead of being interpolated into the HTML: the page stays static and
+needs no RAM to be assembled. Moving to this scheme freed about 650 bytes out of
+80 KB — a meaningful amount on a microcontroller.
 
-Если в `secrets.h` задан `API_TOKEN`, открывай страницу как
-`http://claude-led.local/?token=xxxx` — она подхватит токен из адресной строки
-и добавит его ко всем своим запросам.
+If `API_TOKEN` is set in `secrets.h`, open the page as
+`http://claude-led.local/?token=xxxx` — it picks the token up from the query string
+and appends it to all of its own requests.
 
 ---
 
-## Хуки Claude Code
+## Claude Code hooks
 
-Что `install.sh` дописывает в `~/.claude/settings.json`:
+What `install.sh` adds to `~/.claude/settings.json`:
 
 ```json
 "hooks": {
@@ -149,73 +166,73 @@ void handleRoot() {
 }
 ```
 
-- `UserPromptSubmit` — ты отправил промпт, Claude начал работать: светодиод гаснет.
-- `Stop` — Claude закончил отвечать: три мига и ровный свет.
+- `UserPromptSubmit` — you submitted a prompt and Claude started working: the LED goes dark.
+- `Stop` — Claude finished answering: three blinks and a steady light.
 
-То есть **горит = можно забирать результат, погашен = ещё думает**. Если хочется,
-чтобы во время работы он не гас, а плавно дышал, поменяй в хуке `off` на `pulse`.
+So **lit = your result is ready, dark = still thinking**. If you'd rather have it
+breathe during work instead of going dark, change `off` to `pulse` in the hook.
 
-Вывод глушится в `/dev/null` намеренно: stdout хука `UserPromptSubmit` иначе
-попадает в контекст модели.
+Output is deliberately sent to `/dev/null`: stdout from a `UserPromptSubmit` hook
+otherwise ends up in the model's context.
 
-Посмотреть или отключить — команда `/hooks` в Claude Code.
+Use `/hooks` in Claude Code to inspect or disable them.
 
 ---
 
-## Ctrl+T — переключить светодиод
+## Ctrl+T — toggle the LED
 
 ```bash
-scripts/hotkey-xfce.sh install    # повесить
-scripts/hotkey-xfce.sh status     # проверить
-scripts/hotkey-xfce.sh remove     # снять
+scripts/hotkey-xfce.sh install    # bind it
+scripts/hotkey-xfce.sh status     # check
+scripts/hotkey-xfce.sh remove     # unbind
 ```
 
-Вешает глобальный хоткей XFCE через `xfconf`:
+Registers a global XFCE hotkey through `xfconf`:
 
 ```
 /commands/custom/<Primary>t  ->  /path/to/scripts/led.sh toggle
 ```
 
-Погашен — зажжётся, горит или дышит — погаснет. Работает во всей системе,
-применяется сразу и переживает перезагрузку.
+Dark turns on, lit or breathing turns off. Works system-wide, applies immediately and
+survives a reboot.
 
-**Важно:** XFCE перехватывает клавишу глобально, поэтому `Ctrl+T` перестаёт
-доходить до приложений — в браузере больше не откроется новая вкладка, в Claude Code
-не переключится панель задач. Если это мешает, сними хоткей командой `remove`
-и повесь другую комбинацию:
+**Heads up:** XFCE grabs the key globally, so `Ctrl+T` stops reaching applications —
+your browser will no longer open a new tab with it. If that bothers you, `remove` it
+and bind a different combination:
 
 ```bash
 KEY='<Primary><Alt>t' scripts/hotkey-xfce.sh install
 ```
 
-Другое действие вместо `off` — тоже переменной:
+A different action instead of `toggle` works the same way:
 
 ```bash
 KEY='<Super>l' ACTION=pulse scripts/hotkey-xfce.sh install
 ```
 
-Доступные действия: `toggle` (по умолчанию), `on`, `off`, `pulse`, `done`.
+Available actions: `toggle` (default), `on`, `off`, `pulse`, `done`.
 
-### Не XFCE?
+### Not on XFCE?
 
-`hotkey-xfce.sh` работает только в XFCE. Аналоги для остальных:
+`hotkey-xfce.sh` only handles XFCE. Equivalents elsewhere:
 
-| Окружение | Как повесить |
+| Desktop | How to bind |
 |---|---|
-| GNOME | Настройки → Клавиатура → Дополнительные комбинации, команда `led.sh toggle` |
-| KDE | Параметры системы → Комбинации клавиш → Особые команды |
-| i3 / sway | `bindsym Control+t exec /path/to/led.sh toggle` в конфиге |
+| GNOME | Settings → Keyboard → Custom Shortcuts, command `led.sh toggle` |
+| KDE | System Settings → Shortcuts → Custom Shortcuts |
+| i3 / sway | `bindsym Control+t exec /path/to/led.sh toggle` in the config |
 | Hyprland | `bind = CTRL, T, exec, /path/to/led.sh toggle` |
-| голый X11 | `xbindkeys` с `"led.sh toggle"` + `Control + t` в `~/.xbindkeysrc` |
+| bare X11 | `xbindkeys` with `"led.sh toggle"` + `Control + t` in `~/.xbindkeysrc` |
 
 ---
 
-## Структура
+## Layout
 
 ```
-firmware/claude_led/claude_led.ino   прошивка ESP8266
-firmware/claude_led/secrets.h.example  шаблон WiFi-конфига (secrets.h в .gitignore)
-scripts/led.sh                       CLI: on/off/toggle/pulse/blink/done/status
-scripts/install.sh                   установщик хуков Claude Code
-scripts/hotkey-xfce.sh               глобальный хоткей Ctrl+T (toggle)
+firmware/claude_led/claude_led.ino     ESP8266 firmware
+firmware/claude_led/secrets.h.example  Wi-Fi config template (secrets.h is gitignored)
+scripts/led.sh                         CLI: on/off/toggle/pulse/blink/done/status
+scripts/install.sh                     Claude Code hook installer
+scripts/hotkey-xfce.sh                 global Ctrl+T hotkey
+docs/                                  images and translated READMEs
 ```
