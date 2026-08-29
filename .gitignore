@@ -1,0 +1,8 @@
+# Реальные WiFi-креды — никогда не в репозиторий
+firmware/claude_led/secrets.h
+
+# Артефакты сборки arduino-cli
+build/
+*.bin
+*.elf
+*.map
