@@ -106,12 +106,29 @@ Si `API_TOKEN` est défini dans `secrets.h`, chaque requête doit porter `?token
 
 ```bash
 scripts/led.sh on | off | toggle | pulse | done | blink 5 100 | status
+scripts/led.sh find     # trouver la carte sur le réseau et mémoriser son adresse
+scripts/led.sh where    # afficher l'adresse actuellement utilisée
 ```
 
-L'adresse provient de `CLAUDE_LED_URL`, puis de `~/.claude-led.conf`, et enfin de
-`http://claude-led.local`. Le script sort toujours avec le code 0 et ne bloque jamais
-plus de 2 secondes : c'est ce qui permet de l'accrocher à un hook sans danger. Une
-carte débranchée ou injoignable ne ralentira ni ne cassera Claude Code.
+L'adresse provient de `CLAUDE_LED_URL` (environnement ou `~/.claude-led.conf`), sinon
+de l'IP mise en cache dans `~/.cache/claude-led/ip` : c'est `find` qui l'écrit, et le
+script la rafraîchit tout seul dès que l'adresse mémorisée cesse de répondre (au plus
+une fois par minute, voir `CLAUDE_LED_SCAN_COOLDOWN`). Un changement de bail DHCP se
+répare donc de lui-même, sans toucher à la moindre configuration.
+
+Appelée depuis un hook ou un raccourci clavier — partout où stdout n'est pas un
+terminal — une commande qui agit sur la LED se détache immédiatement et fait le travail
+réseau en arrière-plan : elle rend la main en quelques millisecondes et sort toujours
+avec le code 0, ce qui permet de l'accrocher à un hook sans danger. Tapée à la main
+dans un terminal, elle reste au premier plan et affiche la réponse de la carte comme
+avant. `CLAUDE_LED_WAIT=1` force l'attente, `CLAUDE_LED_WAIT=0` force le détachement.
+
+À noter : `claude-led.local` n'est jamais résolu sur le chemin du hook. Une requête
+mDNS qui échoue coûte 5 secondes pleines, et c'est précisément ce qui faisait sauter le
+délai du hook quand la carte était éteinte. La résolution de noms n'a lieu que dans
+`find`. Si l'adresse en cache reste muette, `find` balaie aussi votre `/24` local —
+uniquement le port 80, une sonde par hôte — donc sur un réseau où cela passe mal, fixez
+plutôt l'adresse avec `CLAUDE_LED_URL`.
 
 ---
 

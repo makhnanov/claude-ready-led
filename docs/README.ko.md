@@ -103,12 +103,27 @@ ping claude-led.local                                    # 또는 mDNS로
 
 ```bash
 scripts/led.sh on | off | toggle | pulse | done | blink 5 100 | status
+scripts/led.sh find     # 네트워크에서 보드를 찾아 주소를 기억
+scripts/led.sh where    # 지금 쓰고 있는 주소를 출력
 ```
 
-주소는 `CLAUDE_LED_URL`, 그다음 `~/.claude-led.conf`, 마지막으로
-`http://claude-led.local` 순으로 결정됩니다. 이 스크립트는 언제나 0으로 종료하고 2초
-넘게 멈춰 있지 않습니다. 훅에 걸어도 안전한 이유가 바로 이것입니다. 전원이 빠졌거나
-닿지 않는 보드 때문에 Claude Code가 느려지거나 망가지는 일은 없습니다.
+주소는 `CLAUDE_LED_URL`(환경 변수 또는 `~/.claude-led.conf`)에서, 없으면
+`~/.cache/claude-led/ip`에 캐시된 IP에서 결정됩니다. 이 캐시를 쓰는 것이 `find`이고,
+기억해 둔 주소가 응답을 멈추면 스크립트가 알아서 다시 찾습니다(많아야 1분에 한 번,
+`CLAUDE_LED_SCAN_COOLDOWN` 참고). 그래서 DHCP 임대가 바뀌어도 저절로 고쳐지고, 설정을
+손댈 필요가 없습니다.
+
+훅이나 단축키에서 부를 때, 즉 stdout이 터미널이 아닌 곳에서는 LED를 조작하는 명령이
+곧바로 떨어져 나가 네트워크 작업을 백그라운드에서 합니다. 몇 밀리초 만에 돌아오고 언제나
+0으로 종료하니, 훅에 걸어도 안전한 이유가 바로 이것입니다. 터미널에서 직접 입력하면
+예전처럼 앞에 남아 보드의 응답을 찍어 줍니다. `CLAUDE_LED_WAIT=1`은 항상 기다리게,
+`CLAUDE_LED_WAIT=0`은 항상 떨어져 나가게 합니다.
+
+훅 경로에서는 `claude-led.local`을 아예 해석하지 않습니다. 실패하는 mDNS 질의는 꼬박
+5초가 걸리고, 보드가 꺼져 있을 때 훅 제한 시간을 터뜨리던 것이 바로 이것이었습니다. 이름
+해석은 `find` 안에서만 일어납니다. 캐시된 주소가 잠잠하면 `find`는 로컬 `/24`도 훑습니다
+— 포트 80만, 호스트당 한 번씩. 그런 동작이 달갑지 않은 네트워크라면 `CLAUDE_LED_URL`로
+주소를 고정하세요.
 
 ---
 

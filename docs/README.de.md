@@ -106,12 +106,29 @@ Ist in `secrets.h` ein `API_TOKEN` gesetzt, braucht jede Anfrage `?token=...`.
 
 ```bash
 scripts/led.sh on | off | toggle | pulse | done | blink 5 100 | status
+scripts/led.sh find     # Board im Netz finden und seine Adresse merken
+scripts/led.sh where    # die gerade verwendete Adresse ausgeben
 ```
 
-Die Adresse kommt aus `CLAUDE_LED_URL`, dann aus `~/.claude-led.conf`, zuletzt
-`http://claude-led.local`. Das Skript beendet sich immer mit 0 und blockiert nie länger
-als 2 Sekunden — genau deshalb darf es an einem Hook hängen: Ein abgezogenes oder nicht
-erreichbares Board bremst Claude Code weder aus noch bringt es ihn durcheinander.
+Die Adresse kommt aus `CLAUDE_LED_URL` (Umgebung oder `~/.claude-led.conf`), sonst aus
+der zwischengespeicherten IP in `~/.cache/claude-led/ip` — die schreibt `find`, und das
+Skript frischt sie von selbst auf, sobald die gemerkte Adresse nicht mehr antwortet
+(höchstens einmal pro Minute, siehe `CLAUDE_LED_SCAN_COOLDOWN`). Ein Wechsel der
+DHCP-Lease repariert sich also selbst; du musst keine Konfiguration anfassen.
+
+Aus einem Hook oder von einer Tastenkombination aufgerufen — überall dort, wo stdout
+kein Terminal ist — klinkt sich ein Befehl, der die LED schaltet, sofort aus und
+erledigt die Netzarbeit im Hintergrund: Er kehrt nach wenigen Millisekunden zurück und
+beendet sich immer mit 0. Genau deshalb darf er an einem Hook hängen. Von Hand im
+Terminal getippt bleibt er im Vordergrund und gibt die Antwort des Boards aus wie
+bisher. `CLAUDE_LED_WAIT=1` erzwingt das Warten, `CLAUDE_LED_WAIT=0` das Ausklinken.
+
+Auf dem Hook-Pfad wird `claude-led.local` nie aufgelöst: Eine fehlschlagende
+mDNS-Abfrage kostet volle 5 Sekunden und hat früher genau dann den Hook-Timeout
+gesprengt, wenn das Board aus war. Namensauflösung passiert nur innerhalb von `find`.
+Antwortet die gemerkte Adresse nicht mehr, tastet `find` zusätzlich dein lokales `/24`
+ab — nur Port 80, eine Anfrage pro Host. In einem Netz, in dem das unerwünscht ist,
+lege die Adresse lieber mit `CLAUDE_LED_URL` fest.
 
 ---
 

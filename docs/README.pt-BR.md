@@ -104,12 +104,29 @@ Se `API_TOKEN` estiver definido em `secrets.h`, toda requisição precisa de `?t
 
 ```bash
 scripts/led.sh on | off | toggle | pulse | done | blink 5 100 | status
+scripts/led.sh find     # achar a placa na rede e guardar o endereço dela
+scripts/led.sh where    # mostrar o endereço em uso no momento
 ```
 
-O endereço vem de `CLAUDE_LED_URL`, depois de `~/.claude-led.conf` e por fim
-`http://claude-led.local`. O script sempre sai com código 0 e nunca trava por mais de
-2 segundos — é por isso que dá para pendurá-lo num hook: uma placa desligada ou
-inacessível não deixa o Claude Code lento nem o quebra.
+O endereço vem de `CLAUDE_LED_URL` (ambiente ou `~/.claude-led.conf`) e, se não, do IP
+em cache em `~/.cache/claude-led/ip`: quem o escreve é o `find`, e o script atualiza
+sozinho assim que o endereço guardado para de responder (no máximo uma vez por minuto,
+veja `CLAUDE_LED_SCAN_COOLDOWN`). Assim, troca de concessão DHCP se conserta sozinha —
+não precisa mexer em configuração nenhuma.
+
+Chamado de um hook ou de um atalho de teclado — em qualquer lugar onde stdout não seja
+um terminal — um comando que age no LED se desprende na hora e faz o trabalho de rede
+em segundo plano: volta em alguns milissegundos e sempre sai com código 0, que é o que
+permite pendurá-lo num hook. Digitado à mão num terminal, ele fica em primeiro plano e
+imprime a resposta da placa como antes. `CLAUDE_LED_WAIT=1` força a espera;
+`CLAUDE_LED_WAIT=0`, o desprendimento.
+
+Repare que `claude-led.local` nunca é resolvido no caminho do hook: uma consulta mDNS
+que falha custa 5 segundos inteiros, e era justamente isso que estourava o tempo limite
+do hook quando a placa estava desligada. A resolução de nomes só acontece dentro do
+`find`. Se o endereço em cache emudecer, o `find` ainda varre a sua `/24` local — só a
+porta 80, uma sondagem por host —, então numa rede em que isso não cai bem, fixe o
+endereço com `CLAUDE_LED_URL`.
 
 ---
 

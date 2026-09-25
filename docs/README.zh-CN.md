@@ -102,11 +102,24 @@ ping claude-led.local                                    # 或者走 mDNS
 
 ```bash
 scripts/led.sh on | off | toggle | pulse | done | blink 5 100 | status
+scripts/led.sh find     # 在网络里找到开发板并记住它的地址
+scripts/led.sh where    # 打印当前使用的地址
 ```
 
-地址依次取自 `CLAUDE_LED_URL`、`~/.claude-led.conf`，最后回退到
-`http://claude-led.local`。脚本永远以 0 退出，而且最多阻塞 2 秒 —— 正因为这样才
-敢挂在钩子上：开发板拔了电或者连不上，都不会拖慢或者搞坏 Claude Code。
+地址先取自 `CLAUDE_LED_URL`（环境变量或 `~/.claude-led.conf`），否则取自
+`~/.cache/claude-led/ip` 里缓存的 IP —— 这个缓存由 `find` 写入，而且一旦记住的地址不再
+响应，脚本会自己重新去找（最多一分钟一次，见 `CLAUDE_LED_SCAN_COOLDOWN`）。所以 DHCP
+租约变了也会自动恢复，不用去改任何配置。
+
+从钩子或者快捷键调用时 —— 也就是 stdout 不是终端的场合 —— 操作 LED 的命令会立刻脱离，
+把网络活儿放到后台去做：几毫秒就返回，而且永远以 0 退出，这正是它敢挂在钩子上的原因。
+在终端里手敲时，它仍然留在前台，照旧打印开发板的回应。`CLAUDE_LED_WAIT=1` 强制等待，
+`CLAUDE_LED_WAIT=0` 强制脱离。
+
+注意：钩子这条路径上从不解析 `claude-led.local`。一次失败的 mDNS 查询要整整 5 秒，开发板
+没开机时把钩子超时撑爆的就是它。名字解析只发生在 `find` 里面。如果缓存的地址不吭声，
+`find` 还会扫一遍本地 `/24` —— 只探 80 端口，每台主机一次。要是在不方便这么做的网络里，
+就用 `CLAUDE_LED_URL` 把地址钉死。
 
 ---
 
