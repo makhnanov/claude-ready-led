@@ -88,9 +88,14 @@ say "хуки прописаны в $SETTINGS (бэкап: $SETTINGS.bak)"
 if "$LED_SH" status | grep -q '"ip"'; then
   say "устройство отвечает:"
   "$LED_SH" status | sed 's/^/    /'
+elif "$LED_SH" find; then
+  # адрес мог смениться или mDNS не работает — led.sh запомнил найденный IP сам
+  say "устройство отвечает:"
+  "$LED_SH" status | sed 's/^/    /'
 else
-  printf '\033[33mВнимание:\033[0m устройство по адресу %s не отвечает.\n' "$LED_URL"
-  printf '  Прошей ESP8266 (см. README) или поправь CLAUDE_LED_URL в %s\n' "$CONF"
+  printf '\033[33mВнимание:\033[0m устройство не найдено в локальной сети.\n'
+  printf '  Прошей ESP8266 (см. README), проверь питание и Wi-Fi,\n'
+  printf '  либо пропиши точный адрес в CLAUDE_LED_URL в %s\n' "$CONF"
 fi
 
 say "готово. Открой /hooks в Claude Code или перезапусти его, чтобы хуки подхватились."

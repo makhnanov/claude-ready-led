@@ -103,12 +103,28 @@ If `API_TOKEN` is set in `secrets.h`, every request needs `?token=...`.
 
 ```bash
 scripts/led.sh on | off | toggle | pulse | done | blink 5 100 | status
+scripts/led.sh find     # locate the board on the network and cache its address
+scripts/led.sh where    # print the address currently in use
 ```
 
-The address comes from `CLAUDE_LED_URL`, then `~/.claude-led.conf`, then
-`http://claude-led.local`. The script always exits 0 and never blocks for more than
-2 seconds, which is what makes it safe to attach to hooks: an unplugged or unreachable
-board will not slow down or break Claude Code.
+The address comes from `CLAUDE_LED_URL` (env or `~/.claude-led.conf`), then the cached
+IP in `~/.cache/claude-led/ip`, which `find` writes and which the script refreshes on
+its own whenever the cached address stops answering (at most once a minute — see
+`CLAUDE_LED_SCAN_COOLDOWN`). So a DHCP lease change fixes itself; you do not have to
+edit any config.
+
+Run from a hook or a hotkey — anywhere stdout is not a terminal — a command that acts
+on the LED detaches immediately and does the network work in the background: it returns
+in a few milliseconds and always exits 0, which is what makes it safe to attach to
+hooks. Typed by hand in a terminal it stays in the foreground and prints the board's
+reply as before. `CLAUDE_LED_WAIT=1` forces waiting, `CLAUDE_LED_WAIT=0` forces
+detaching.
+
+Note that `claude-led.local` is never resolved on the hook path: a failing mDNS lookup
+costs a full 5 seconds, which used to blow the hook timeout whenever the board was off.
+Name resolution happens only inside `find`. If the cached address stops answering,
+`find` also sweeps your local `/24` — port 80 only, one probe per host — so on a network
+where that is unwelcome, pin the address with `CLAUDE_LED_URL` instead.
 
 ---
 
