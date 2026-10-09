@@ -1,5 +1,6 @@
 # Реальные WiFi-креды — никогда не в репозиторий
 firmware/claude_led/secrets.h
+firmware/claude_led_button/secrets.h
 
 # Артефакты сборки arduino-cli
 build/

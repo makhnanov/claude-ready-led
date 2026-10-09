@@ -73,6 +73,15 @@ arduino-cli core install esp8266:esp8266
 arduino-cli compile --fqbn esp8266:esp8266:nodemcuv2 --upload -p /dev/ttyUSB0 firmware/claude_led
 ```
 
+या यही काम स्क्रिप्ट से — वह ख़ुद कोर इंस्टॉल करती है, उदाहरण से `secrets.h` बनाती है और पोर्ट
+भी ख़ुद ढूँढ़ लेती है:
+
+```bash
+scripts/flash.sh              # मुख्य बोर्ड
+scripts/flash.sh button       # वायरलेस बटन (नीचे देखें)
+scripts/flash.sh button -m    # और उसके बाद सीरियल मॉनिटर खोलें
+```
+
 `secrets.h` `.gitignore` में है, इसलिए आपका Wi-Fi पासवर्ड कभी रिपॉज़िटरी तक नहीं पहुँचता।
 git में सिर्फ़ प्लेसहोल्डर वाली `secrets.h.example` रहती है।
 
@@ -240,13 +249,53 @@ KEY='<Super>l' ACTION=pulse scripts/hotkey-xfce.sh install
 
 ---
 
+## वायरलेस बटन
+
+दूसरी NodeMCU LED के लिए एक असली स्विच बन जाती है — बीच में कंप्यूटर की ज़रूरत नहीं, बस Wi-Fi
+और कोई भी USB चार्जर। सोल्डरिंग कुछ नहीं: बोर्ड पर पहले से मौजूद बटन और LED ही काम आते हैं।
+
+| बटन | क्या होता है |
+|---|---|
+| `RESET` | बोर्ड बूट होता है, मुख्य बोर्ड को `GET /toggle` भेजता है और एक बार चमकता है — ≈2.4 से |
+| `FLASH` | बोर्ड चालू रहने तक तुरंत दोबारा टॉगल, रीबूट के बिना — ≈50 मि.से |
+
+एक लंबी चमक की जगह तीन तेज़ चमक का मतलब है कि मुख्य बोर्ड तक पहुँच नहीं बनी: Wi-Fi नहीं है,
+या LED वाला बोर्ड बंद है।
+
+```bash
+cp firmware/claude_led_button/secrets.h.example firmware/claude_led_button/secrets.h
+$EDITOR firmware/claude_led_button/secrets.h   # वही Wi-Fi, साथ में मुख्य बोर्ड का पता
+
+scripts/flash.sh button
+```
+
+`TARGET_HOST` तय करता है कि toggle कहाँ जाएगा: IP (`192.168.1.3`) को रिज़ॉल्व करने की ज़रूरत
+नहीं और वह सबसे तेज़ है, mDNS नाम (`claude-led.local`) DHCP से पता बदलने पर भी चलता रहता है।
+पता इस क्रम में खोजा जाता है: RTC कैश → `TARGET_HOST` → `claude-led.local`। आख़िरी चरण के लिए
+अलग लाइब्रेरी नहीं चाहिए — ESP8266 कोर lwIP को `LWIP_DNS_SUPPORT_MDNS_QUERIES` के साथ बनाता है,
+इसलिए `WiFi.hostByName()` ख़ुद मल्टीकास्ट क्वेरी भेज देता है।
+
+इन 2.4 सेकंड में 0.4 से बूट, 1.8 से DHCP सहित Wi-Fi और 0.26 से ख़ुद रिक्वेस्ट है। इससे ज़्यादा
+न लगे, इसलिए बोर्ड पता, Wi-Fi चैनल और BSSID को RTC मेमोरी में कैश करता है — अगली बार `RESET`
+सभी चैनल स्कैन करने के बजाय सीधे जाने-पहचाने ऐक्सेस पॉइंट से जुड़ता है। RTC मेमोरी `RESET` तो
+झेल लेती है, बिजली कटना नहीं — इसलिए फिर से प्लग करने के बाद पहली बूट `TARGET_HOST` वाले लंबे
+रास्ते से जाती है।
+
+**बिजली देना भी एक दबाव है:** toggle `setup()` में है, तो बोर्ड को चार्जर में लगाने पर LED एक
+बार टॉगल हो जाती है। सिर्फ़ `FLASH` बटन चाहिए तो `setup()` से `doToggle()` कॉल हटा दें।
+
+---
+
 ## ढाँचा
 
 ```
-firmware/claude_led/claude_led.ino     ESP8266 फ़र्मवेयर
-firmware/claude_led/secrets.h.example  Wi-Fi कॉन्फ़िग टेम्पलेट (secrets.h gitignore में है)
-scripts/led.sh                         CLI: on/off/toggle/pulse/blink/done/status
-scripts/install.sh                     Claude Code हुक इंस्टॉलर
-scripts/hotkey-xfce.sh                 ग्लोबल Ctrl+T शॉर्टकट
-docs/                                  तस्वीरें और अनुवादित README
+firmware/claude_led/claude_led.ino                ESP8266 फ़र्मवेयर
+firmware/claude_led/secrets.h.example             Wi-Fi कॉन्फ़िग टेम्पलेट (secrets.h gitignore में है)
+firmware/claude_led_button/claude_led_button.ino  बटन बोर्ड का फ़र्मवेयर: RESET से LED टॉगल
+firmware/claude_led_button/secrets.h.example      बटन का कॉन्फ़िग टेम्पलेट (Wi-Fi + बोर्ड का पता)
+scripts/led.sh                                    CLI: on/off/toggle/pulse/blink/done/status
+scripts/flash.sh                                  arduino-cli से कोई भी बोर्ड फ़्लैश करें
+scripts/install.sh                                Claude Code हुक इंस्टॉलर
+scripts/hotkey-xfce.sh                            ग्लोबल Ctrl+T शॉर्टकट
+docs/                                             तस्वीरें और अनुवादित README
 ```

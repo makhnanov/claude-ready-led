@@ -75,6 +75,15 @@ arduino-cli core install esp8266:esp8266
 arduino-cli compile --fqbn esp8266:esp8266:nodemcuv2 --upload -p /dev/ttyUSB0 firmware/claude_led
 ```
 
+Ou laissez le script s'en charger : il installe le core, crée `secrets.h` à partir de
+l'exemple et trouve le port tout seul :
+
+```bash
+scripts/flash.sh              # carte principale
+scripts/flash.sh button       # le bouton sans fil (voir plus bas)
+scripts/flash.sh button -m    # puis ouvrir le moniteur série
+```
+
 `secrets.h` figure dans `.gitignore`, votre mot de passe Wi-Fi n'atteint donc jamais le
 dépôt. Seul `secrets.h.example`, rempli de valeurs fictives, est suivi par git.
 
@@ -247,13 +256,57 @@ Actions disponibles : `toggle` (par défaut), `on`, `off`, `pulse`, `done`.
 
 ---
 
+## Bouton sans fil
+
+Une deuxième NodeMCU devient un interrupteur physique pour la LED : aucun ordinateur dans la
+boucle, juste du Wi-Fi et n'importe quel chargeur USB. Rien à souder : elle se sert des
+boutons et de la LED déjà présents sur la carte.
+
+| Bouton | Ce qui se passe |
+|---|---|
+| `RESET` | la carte démarre, envoie `GET /toggle` à la carte principale et clignote une fois — ≈2,4 s |
+| `FLASH` | bascule immédiate tant que la carte reste alimentée, sans redémarrage — ≈50 ms |
+
+Trois clignotements rapides au lieu d'un long signifient qu'elle n'a pas joint la carte
+principale : pas de Wi-Fi, ou la carte de la LED est éteinte.
+
+```bash
+cp firmware/claude_led_button/secrets.h.example firmware/claude_led_button/secrets.h
+$EDITOR firmware/claude_led_button/secrets.h   # le même Wi-Fi, plus l'adresse de la carte principale
+
+scripts/flash.sh button
+```
+
+`TARGET_HOST` indique où part le toggle : une IP (`192.168.1.3`) ne demande aucune résolution
+et c'est le plus rapide, un nom mDNS (`claude-led.local`) survit à un changement de DHCP.
+L'adresse est cherchée dans cet ordre : cache RTC → `TARGET_HOST` → `claude-led.local`. Cette
+dernière étape ne nécessite aucune bibliothèque supplémentaire : le core ESP8266 compile lwIP
+avec `LWIP_DNS_SUPPORT_MDNS_QUERIES`, donc `WiFi.hostByName()` envoie lui-même la requête
+multicast.
+
+Sur ces 2,4 secondes, 0,4 s pour le démarrage, 1,8 s pour le Wi-Fi avec DHCP et 0,26 s pour la
+requête. Pour que ce ne soit pas plus long, la carte met en cache dans la mémoire RTC l'adresse,
+le canal Wi-Fi et le BSSID : un `RESET` suivant se reconnecte directement au point d'accès connu
+au lieu de scanner tous les canaux. La mémoire RTC survit à un `RESET` mais pas à une coupure de
+courant, donc le premier démarrage après rebranchement passe par le chemin long, via
+`TARGET_HOST`.
+
+**Mettre sous tension équivaut à un appui :** le toggle vit dans `setup()`, donc brancher la
+carte sur un chargeur bascule la LED une fois. Supprimez l'appel `doToggle()` de `setup()` si
+vous ne voulez que le bouton `FLASH`.
+
+---
+
 ## Structure
 
 ```
-firmware/claude_led/claude_led.ino     firmware de l'ESP8266
-firmware/claude_led/secrets.h.example  modèle de configuration Wi-Fi (secrets.h est dans gitignore)
-scripts/led.sh                         CLI : on/off/toggle/pulse/blink/done/status
-scripts/install.sh                     installateur des hooks Claude Code
-scripts/hotkey-xfce.sh                 raccourci global Ctrl+T
-docs/                                  images et READMEs traduits
+firmware/claude_led/claude_led.ino                firmware de l'ESP8266
+firmware/claude_led/secrets.h.example             modèle de configuration Wi-Fi (secrets.h est dans gitignore)
+firmware/claude_led_button/claude_led_button.ino  firmware du bouton : RESET bascule la LED
+firmware/claude_led_button/secrets.h.example      modèle de configuration du bouton (Wi-Fi + adresse de la carte)
+scripts/led.sh                                    CLI : on/off/toggle/pulse/blink/done/status
+scripts/flash.sh                                  flashe l'une ou l'autre carte via arduino-cli
+scripts/install.sh                                installateur des hooks Claude Code
+scripts/hotkey-xfce.sh                            raccourci global Ctrl+T
+docs/                                             images et READMEs traduits
 ```

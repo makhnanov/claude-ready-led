@@ -73,6 +73,15 @@ arduino-cli core install esp8266:esp8266
 arduino-cli compile --fqbn esp8266:esp8266:nodemcuv2 --upload -p /dev/ttyUSB0 firmware/claude_led
 ```
 
+O deja que lo haga el script: instala el core, crea `secrets.h` a partir del ejemplo y
+encuentra el puerto por su cuenta:
+
+```bash
+scripts/flash.sh              # placa principal
+scripts/flash.sh button       # el botón inalámbrico (más abajo)
+scripts/flash.sh button -m    # y abrir después el monitor serie
+```
+
 `secrets.h` está en `.gitignore`, así que tu contraseña de Wi-Fi nunca llega al
 repositorio. Solo se versiona `secrets.h.example` con marcadores de posición.
 
@@ -245,13 +254,56 @@ Acciones disponibles: `toggle` (por defecto), `on`, `off`, `pulse`, `done`.
 
 ---
 
+## Botón inalámbrico
+
+Una segunda NodeMCU se convierte en un interruptor físico para el LED: sin ordenador de por
+medio, solo Wi-Fi y cualquier cargador USB. No hay que soldar nada: usa los botones y el LED
+que la placa ya trae.
+
+| Botón | Qué ocurre |
+|---|---|
+| `RESET` | la placa arranca, envía `GET /toggle` a la placa principal y parpadea una vez — ≈2,4 s |
+| `FLASH` | conmutación inmediata mientras la placa siga alimentada, sin reiniciar — ≈50 ms |
+
+Tres parpadeos rápidos en lugar de uno largo significan que no alcanzó la placa principal:
+no hay Wi-Fi, o la placa del LED está apagada.
+
+```bash
+cp firmware/claude_led_button/secrets.h.example firmware/claude_led_button/secrets.h
+$EDITOR firmware/claude_led_button/secrets.h   # la misma Wi-Fi, más la dirección de la placa principal
+
+scripts/flash.sh button
+```
+
+`TARGET_HOST` indica a dónde va el toggle: una IP (`192.168.1.3`) no necesita resolución y es
+lo más rápido; un nombre mDNS (`claude-led.local`) sobrevive a un cambio de DHCP. La dirección
+se busca en este orden: caché en RTC → `TARGET_HOST` → `claude-led.local`. Ese último paso no
+necesita ninguna biblioteca extra: el core de ESP8266 compila lwIP con
+`LWIP_DNS_SUPPORT_MDNS_QUERIES`, así que `WiFi.hostByName()` envía la consulta multicast por
+su cuenta.
+
+De esos 2,4 segundos, 0,4 s son el arranque, 1,8 s el Wi-Fi con DHCP y 0,26 s la petición. Para
+que no sea más, la placa guarda en memoria RTC la dirección, el canal Wi-Fi y el BSSID, de modo
+que un `RESET` posterior se reconecta directamente al punto de acceso conocido en vez de escanear
+todos los canales. La memoria RTC sobrevive a un `RESET` pero no a un corte de alimentación, así
+que el primer arranque tras volver a enchufarla va por el camino largo de `TARGET_HOST`.
+
+**Darle corriente cuenta como pulsación:** el toggle vive en `setup()`, así que enchufar la placa
+a un cargador conmuta el LED una vez. Quita la llamada a `doToggle()` de `setup()` si solo
+quieres el botón `FLASH`.
+
+---
+
 ## Estructura
 
 ```
-firmware/claude_led/claude_led.ino     firmware del ESP8266
-firmware/claude_led/secrets.h.example  plantilla de configuración Wi-Fi (secrets.h está en gitignore)
-scripts/led.sh                         CLI: on/off/toggle/pulse/blink/done/status
-scripts/install.sh                     instalador de los hooks de Claude Code
-scripts/hotkey-xfce.sh                 atajo global Ctrl+T
-docs/                                  imágenes y READMEs traducidos
+firmware/claude_led/claude_led.ino                firmware del ESP8266
+firmware/claude_led/secrets.h.example             plantilla de configuración Wi-Fi (secrets.h está en gitignore)
+firmware/claude_led_button/claude_led_button.ino  firmware del botón: RESET conmuta el LED
+firmware/claude_led_button/secrets.h.example      plantilla del botón (Wi-Fi + dirección de la placa)
+scripts/led.sh                                    CLI: on/off/toggle/pulse/blink/done/status
+scripts/flash.sh                                  graba cualquiera de las dos placas con arduino-cli
+scripts/install.sh                                instalador de los hooks de Claude Code
+scripts/hotkey-xfce.sh                            atajo global Ctrl+T
+docs/                                             imágenes y READMEs traducidos
 ```

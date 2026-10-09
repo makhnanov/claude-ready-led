@@ -71,6 +71,14 @@ arduino-cli core install esp8266:esp8266
 arduino-cli compile --fqbn esp8266:esp8266:nodemcuv2 --upload -p /dev/ttyUSB0 firmware/claude_led
 ```
 
+也可以交给脚本——它会自动安装内核、从示例生成 `secrets.h` 并找到串口：
+
+```bash
+scripts/flash.sh              # 主板
+scripts/flash.sh button       # 无线按钮（见下文）
+scripts/flash.sh button -m    # 烧写后顺便打开串口监视器
+```
+
 `secrets.h` 已经写进 `.gitignore`，所以你的 Wi-Fi 密码不会进仓库。
 版本库里只有带占位符的 `secrets.h.example`。
 
@@ -229,13 +237,50 @@ KEY='<Super>l' ACTION=pulse scripts/hotkey-xfce.sh install
 
 ---
 
+## 无线按钮
+
+第二块 NodeMCU 变成 LED 的实体开关——不需要电脑，只要 Wi-Fi 和任意 USB 充电器。无需焊接：
+用的就是板子上现成的按键和 LED。
+
+| 按键 | 作用 |
+|---|---|
+| `RESET` | 板子启动，向主板发送 `GET /toggle`，自身 LED 闪一次——约 2.4 秒 |
+| `FLASH` | 保持供电期间立即再次切换，无需重启——约 50 毫秒 |
+
+如果是三次快闪而不是一次长亮，说明没能连上主板：没有 Wi-Fi，或者 LED 板没开。
+
+```bash
+cp firmware/claude_led_button/secrets.h.example firmware/claude_led_button/secrets.h
+$EDITOR firmware/claude_led_button/secrets.h   # 同一个 Wi-Fi，再加上主板地址
+
+scripts/flash.sh button
+```
+
+`TARGET_HOST` 决定 toggle 发往哪里：填 IP（`192.168.1.3`）无需解析，最快；填 mDNS 名
+（`claude-led.local`）则不怕 DHCP 换地址。查找顺序是：RTC 缓存 → `TARGET_HOST` →
+`claude-led.local`。最后一步不需要额外库——ESP8266 内核编译 lwIP 时启用了
+`LWIP_DNS_SUPPORT_MDNS_QUERIES`，所以 `WiFi.hostByName()` 会自己发出组播查询。
+
+这 2.4 秒里，0.4 秒是启动，1.8 秒是 Wi-Fi 连接加 DHCP，0.26 秒是请求本身。为了不更慢，板子
+把地址、Wi-Fi 信道和 BSSID 缓存在 RTC 内存里，再次按 `RESET` 就直接连已知的接入点，不用扫描
+所有信道。RTC 内存能扛过 `RESET`，但扛不过断电，所以重新插上后的第一次启动会走
+`TARGET_HOST` 这条长路径。
+
+**通电等于按了一次：**toggle 写在 `setup()` 里，所以把板子插上充电器会切换 LED 一次。只想要
+`FLASH` 按键的话，把 `setup()` 里的 `doToggle()` 调用删掉。
+
+---
+
 ## 目录结构
 
 ```
-firmware/claude_led/claude_led.ino     ESP8266 固件
-firmware/claude_led/secrets.h.example  Wi-Fi 配置模板（secrets.h 已被 gitignore）
-scripts/led.sh                         命令行：on/off/toggle/pulse/blink/done/status
-scripts/install.sh                     Claude Code 钩子安装脚本
-scripts/hotkey-xfce.sh                 全局 Ctrl+T 快捷键
-docs/                                  图片和各语言 README
+firmware/claude_led/claude_led.ino                ESP8266 固件
+firmware/claude_led/secrets.h.example             Wi-Fi 配置模板（secrets.h 已被 gitignore）
+firmware/claude_led_button/claude_led_button.ino  按钮板固件：按 RESET 切换 LED
+firmware/claude_led_button/secrets.h.example      按钮板配置模板（Wi-Fi + 主板地址）
+scripts/led.sh                                    命令行：on/off/toggle/pulse/blink/done/status
+scripts/flash.sh                                  用 arduino-cli 烧写任一块板子
+scripts/install.sh                                Claude Code 钩子安装脚本
+scripts/hotkey-xfce.sh                            全局 Ctrl+T 快捷键
+docs/                                             图片和各语言 README
 ```

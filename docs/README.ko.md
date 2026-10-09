@@ -72,6 +72,15 @@ arduino-cli core install esp8266:esp8266
 arduino-cli compile --fqbn esp8266:esp8266:nodemcuv2 --upload -p /dev/ttyUSB0 firmware/claude_led
 ```
 
+또는 스크립트에 맡기면 됩니다. 코어 설치, 예제에서 `secrets.h` 생성, 포트 탐색까지
+알아서 처리합니다:
+
+```bash
+scripts/flash.sh              # 메인 보드
+scripts/flash.sh button       # 무선 버튼 (아래 참고)
+scripts/flash.sh button -m    # 이후 시리얼 모니터 열기
+```
+
 `secrets.h`는 `.gitignore`에 들어 있어서 Wi-Fi 비밀번호가 저장소로 새어 나가지 않습니다.
 git이 추적하는 건 자리표시자만 들어 있는 `secrets.h.example`뿐입니다.
 
@@ -240,13 +249,52 @@ KEY='<Super>l' ACTION=pulse scripts/hotkey-xfce.sh install
 
 ---
 
+## 무선 버튼
+
+두 번째 NodeMCU가 LED의 물리 스위치가 됩니다. 컴퓨터는 필요 없고 Wi-Fi와 USB 충전기만
+있으면 됩니다. 납땜도 없습니다 — 보드에 이미 있는 버튼과 LED를 그대로 씁니다.
+
+| 버튼 | 동작 |
+|---|---|
+| `RESET` | 보드가 부팅해 메인 보드로 `GET /toggle`을 보내고 한 번 깜빡임 — 약 2.4초 |
+| `FLASH` | 전원이 들어와 있는 동안 재부팅 없이 즉시 다시 토글 — 약 50밀리초 |
+
+길게 한 번이 아니라 짧게 세 번 깜빡이면 메인 보드에 닿지 못한 것입니다. Wi-Fi가 없거나
+LED 보드가 꺼져 있습니다.
+
+```bash
+cp firmware/claude_led_button/secrets.h.example firmware/claude_led_button/secrets.h
+$EDITOR firmware/claude_led_button/secrets.h   # 같은 Wi-Fi, 그리고 메인 보드 주소
+
+scripts/flash.sh button
+```
+
+`TARGET_HOST`는 토글을 보낼 곳입니다. IP(`192.168.1.3`)는 이름 조회가 필요 없어 가장 빠르고,
+mDNS 이름(`claude-led.local`)은 DHCP로 주소가 바뀌어도 살아남습니다. 주소는 RTC 캐시 →
+`TARGET_HOST` → `claude-led.local` 순으로 찾습니다. 마지막 단계에 별도 라이브러리는 필요
+없습니다. ESP8266 코어가 lwIP를 `LWIP_DNS_SUPPORT_MDNS_QUERIES`와 함께 빌드하므로
+`WiFi.hostByName()`이 직접 멀티캐스트 질의를 보냅니다.
+
+2.4초의 구성은 부팅 0.4초, DHCP를 포함한 Wi-Fi 1.8초, 요청 자체 0.26초입니다. 더 길어지지
+않도록 보드는 주소와 Wi-Fi 채널, BSSID를 RTC 메모리에 캐시해 두고, 다음 `RESET`에서는 모든
+채널을 스캔하지 않고 알려진 액세스 포인트로 곧바로 접속합니다. RTC 메모리는 `RESET`은 견디지만
+전원 차단은 견디지 못하므로, 다시 꽂은 뒤 첫 부팅은 `TARGET_HOST`를 통한 긴 경로로 갑니다.
+
+**전원을 넣는 것도 한 번 누른 것입니다.** 토글이 `setup()`에 있어서 보드를 충전기에 꽂으면
+LED가 한 번 바뀝니다. `FLASH` 버튼만 원한다면 `setup()`에서 `doToggle()` 호출을 지우세요.
+
+---
+
 ## 구성
 
 ```
-firmware/claude_led/claude_led.ino     ESP8266 펌웨어
-firmware/claude_led/secrets.h.example  Wi-Fi 설정 템플릿 (secrets.h는 gitignore 처리됨)
-scripts/led.sh                         CLI: on/off/toggle/pulse/blink/done/status
-scripts/install.sh                     Claude Code 훅 설치 스크립트
-scripts/hotkey-xfce.sh                 전역 Ctrl+T 단축키
-docs/                                  이미지와 번역된 README
+firmware/claude_led/claude_led.ino                ESP8266 펌웨어
+firmware/claude_led/secrets.h.example             Wi-Fi 설정 템플릿 (secrets.h는 gitignore 처리됨)
+firmware/claude_led_button/claude_led_button.ino  버튼 보드 펌웨어: RESET으로 LED 토글
+firmware/claude_led_button/secrets.h.example      버튼 보드 설정 템플릿 (Wi-Fi + 메인 보드 주소)
+scripts/led.sh                                    CLI: on/off/toggle/pulse/blink/done/status
+scripts/flash.sh                                  arduino-cli로 두 보드 모두 플래싱
+scripts/install.sh                                Claude Code 훅 설치 스크립트
+scripts/hotkey-xfce.sh                            전역 Ctrl+T 단축키
+docs/                                             이미지와 번역된 README
 ```

@@ -72,6 +72,14 @@ arduino-cli core install esp8266:esp8266
 arduino-cli compile --fqbn esp8266:esp8266:nodemcuv2 --upload -p /dev/ttyUSB0 firmware/claude_led
 ```
 
+أو اترك الأمر للسكربت: فهو يثبّت النواة، وينشئ `secrets.h` من المثال، ويجد المنفذ بنفسه:
+
+```bash
+scripts/flash.sh              # اللوحة الرئيسية
+scripts/flash.sh button       # الزر اللاسلكي (انظر أدناه)
+scripts/flash.sh button -m    # ثم فتح مراقب المنفذ التسلسلي
+```
+
 الملف `secrets.h` مُدرج في `.gitignore`، لذا لا تصل كلمة مرور الشبكة إلى المستودع أبدًا.
 المتتبَّع في git هو `secrets.h.example` فقط، وفيه قيم بديلة.
 
@@ -237,13 +245,52 @@ KEY='<Super>l' ACTION=pulse scripts/hotkey-xfce.sh install
 
 ---
 
+## الزر اللاسلكي
+
+تتحوّل لوحة NodeMCU ثانية إلى مفتاح فعلي للمؤشر: بلا حاسوب في المعادلة، يكفي Wi-Fi وأي
+شاحن USB. لا حاجة إلى أي لحام: يستخدم الأزرار والمؤشر الموجودة أصلاً على اللوحة.
+
+| الزر | ما يحدث |
+|---|---|
+| `RESET` | تبدأ اللوحة، وترسل `GET /toggle` إلى اللوحة الرئيسية، وتُطلق وميضاً واحداً — نحو 2.4 ثانية |
+| `FLASH` | تبديل فوري متكرر ما دامت اللوحة موصولة بالطاقة، دون إعادة تشغيل — نحو 50 ملّي ثانية |
+
+ثلاث ومضات سريعة بدل وميضة واحدة طويلة تعني أنها لم تصل إلى اللوحة الرئيسية: لا Wi-Fi،
+أو أن لوحة المؤشر مطفأة.
+
+```bash
+cp firmware/claude_led_button/secrets.h.example firmware/claude_led_button/secrets.h
+$EDITOR firmware/claude_led_button/secrets.h   # نفس الشبكة، مع عنوان اللوحة الرئيسية
+
+scripts/flash.sh button
+```
+
+يحدّد `TARGET_HOST` إلى أين يذهب الطلب: عنوان IP (`192.168.1.3`) لا يحتاج إلى استعلام وهو
+الأسرع، واسم mDNS (`claude-led.local`) يصمد أمام تغيّر العنوان من DHCP. يُبحث عن العنوان
+بهذا الترتيب: ذاكرة RTC ← `TARGET_HOST` ← `claude-led.local`. الخطوة الأخيرة لا تحتاج مكتبة
+إضافية، فنواة ESP8266 تبني lwIP مع `LWIP_DNS_SUPPORT_MDNS_QUERIES`، ولذلك يرسل
+`WiFi.hostByName()` استعلام البث المتعدد بنفسه.
+
+من هذه 2.4 ثانية: 0.4 للإقلاع، و1.8 لـ Wi-Fi مع DHCP، و0.26 للطلب نفسه. وكي لا تطول أكثر،
+تحتفظ اللوحة في ذاكرة RTC بالعنوان وقناة Wi-Fi وعنوان BSSID، فيتصل `RESET` التالي مباشرة
+بنقطة الوصول المعروفة بدلاً من مسح كل القنوات. ذاكرة RTC تصمد أمام `RESET` لا أمام انقطاع
+الطاقة، لذا يسلك أول إقلاع بعد إعادة التوصيل الطريق الطويل عبر `TARGET_HOST`.
+
+**توصيل الطاقة يعدّ ضغطة:** الطلب موجود في `setup()`، لذا يؤدي وصل اللوحة بالشاحن إلى تبديل
+المؤشر مرة واحدة. احذف نداء `doToggle()` من `setup()` إن أردت زر `FLASH` وحده.
+
+---
+
 ## بنية المشروع
 
 ```
-firmware/claude_led/claude_led.ino     البرنامج الثابت للوحة ESP8266
-firmware/claude_led/secrets.h.example  قالب إعداد الشبكة (الملف secrets.h مستثنى في gitignore)
-scripts/led.sh                         سطر الأوامر: on/off/toggle/pulse/blink/done/status
-scripts/install.sh                     مثبّت خطافات Claude Code
-scripts/hotkey-xfce.sh                 اختصار Ctrl+T العام
-docs/                                  الصور وترجمات ملف README
+firmware/claude_led/claude_led.ino                البرنامج الثابت للوحة ESP8266
+firmware/claude_led/secrets.h.example             قالب إعداد الشبكة (الملف secrets.h مستثنى في gitignore)
+firmware/claude_led_button/claude_led_button.ino  البرنامج الثابت للزر: زر RESET يبدّل المؤشر
+firmware/claude_led_button/secrets.h.example      قالب إعداد الزر (الشبكة + عنوان اللوحة)
+scripts/led.sh                                    سطر الأوامر: on/off/toggle/pulse/blink/done/status
+scripts/flash.sh                                  برمجة أي من اللوحتين عبر arduino-cli
+scripts/install.sh                                مثبّت خطافات Claude Code
+scripts/hotkey-xfce.sh                            اختصار Ctrl+T العام
+docs/                                             الصور وترجمات ملف README
 ```

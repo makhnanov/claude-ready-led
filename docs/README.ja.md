@@ -72,6 +72,15 @@ arduino-cli core install esp8266:esp8266
 arduino-cli compile --fqbn esp8266:esp8266:nodemcuv2 --upload -p /dev/ttyUSB0 firmware/claude_led
 ```
 
+スクリプトに任せることもできます。コアのインストール、サンプルからの `secrets.h` 作成、
+ポートの検出まで自動です:
+
+```bash
+scripts/flash.sh              # 本体の基板
+scripts/flash.sh button       # ワイヤレスボタン（後述）
+scripts/flash.sh button -m    # 書き込み後にシリアルモニタを開く
+```
+
 `secrets.h` は `.gitignore` に入っているので、Wi-Fi のパスワードがリポジトリに入ることは
 ありません。git が追跡するのはプレースホルダー入りの `secrets.h.example` だけです。
 
@@ -241,13 +250,54 @@ KEY='<Super>l' ACTION=pulse scripts/hotkey-xfce.sh install
 
 ---
 
+## ワイヤレスボタン
+
+2 枚目の NodeMCU が LED の物理スイッチになります。コンピュータは不要で、Wi-Fi と USB
+充電器があれば十分です。はんだ付けもなし — 基板にもともと載っているボタンと LED を使います。
+
+| ボタン | 動作 |
+|---|---|
+| `RESET` | 基板が起動し、本体基板に `GET /toggle` を送り、自分の LED を 1 回光らせる — 約 2.4 秒 |
+| `FLASH` | 電源が入っている間は再起動なしで即座に再トグル — 約 50 ミリ秒 |
+
+長い 1 回ではなく短い 3 回の点滅なら、本体基板に届かなかったという意味です。Wi-Fi がない、
+あるいは LED 基板が切れています。
+
+```bash
+cp firmware/claude_led_button/secrets.h.example firmware/claude_led_button/secrets.h
+$EDITOR firmware/claude_led_button/secrets.h   # 同じ Wi-Fi と、本体基板のアドレス
+
+scripts/flash.sh button
+```
+
+`TARGET_HOST` はトグルの宛先です。IP（`192.168.1.3`）は名前解決が不要でいちばん速く、mDNS 名
+（`claude-led.local`）は DHCP でアドレスが変わっても生き残ります。探索順は RTC キャッシュ →
+`TARGET_HOST` → `claude-led.local`。最後の手段に追加ライブラリは不要で、ESP8266 コアは lwIP を
+`LWIP_DNS_SUPPORT_MDNS_QUERIES` 付きでビルドしているため、`WiFi.hostByName()` が自分で
+マルチキャスト問い合わせを送ります。
+
+この 2.4 秒の内訳は、起動 0.4 秒、DHCP を含む Wi-Fi 接続 1.8 秒、リクエスト 0.26 秒です。
+これ以上長くならないよう、基板はアドレスと Wi-Fi チャンネル、BSSID を RTC メモリにキャッシュ
+します。次の `RESET` は全チャンネルをスキャンせず、既知のアクセスポイントへ直接つなぎます。
+RTC メモリは `RESET` では残りますが電源断では消えるので、差し直した後の初回起動は
+`TARGET_HOST` 経由の長い道を通ります。
+
+**電源を入れることも 1 回の押下です。**トグルは `setup()` にあるので、基板を充電器に挿すと
+LED が 1 回切り替わります。`FLASH` ボタンだけが欲しい場合は `setup()` から `doToggle()` の
+呼び出しを削ってください。
+
+---
+
 ## 構成
 
 ```
-firmware/claude_led/claude_led.ino     ESP8266 のファームウェア
-firmware/claude_led/secrets.h.example  Wi-Fi 設定のひな形（secrets.h は gitignore 済み）
-scripts/led.sh                         CLI: on/off/toggle/pulse/blink/done/status
-scripts/install.sh                     Claude Code フックのインストーラ
-scripts/hotkey-xfce.sh                 グローバル Ctrl+T ショートカット
-docs/                                  画像と各言語の README
+firmware/claude_led/claude_led.ino                ESP8266 のファームウェア
+firmware/claude_led/secrets.h.example             Wi-Fi 設定のひな形（secrets.h は gitignore 済み）
+firmware/claude_led_button/claude_led_button.ino  ボタン基板のファームウェア: RESET で LED を切り替え
+firmware/claude_led_button/secrets.h.example      ボタン基板の設定ひな形（Wi-Fi + 本体のアドレス）
+scripts/led.sh                                    CLI: on/off/toggle/pulse/blink/done/status
+scripts/flash.sh                                  arduino-cli でどちらの基板も書き込み
+scripts/install.sh                                Claude Code フックのインストーラ
+scripts/hotkey-xfce.sh                            グローバル Ctrl+T ショートカット
+docs/                                             画像と各言語の README
 ```
