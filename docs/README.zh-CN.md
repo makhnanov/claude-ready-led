@@ -239,15 +239,30 @@ KEY='<Super>l' ACTION=pulse scripts/hotkey-xfce.sh install
 
 ## 无线按钮
 
-第二块 NodeMCU 变成 LED 的实体开关——不需要电脑，只要 Wi-Fi 和任意 USB 充电器。无需焊接：
+第二块 NodeMCU 变成 LED 的实体开关——不需要电脑，只要 Wi-Fi 和任意 USB 充电器。焊接也不是必须的：
 用的就是板子上现成的按键和 LED。
 
 | 按键 | 作用 |
 |---|---|
 | `RESET` | 板子启动，向主板发送 `GET /toggle`，自身 LED 闪一次——约 2.4 秒 |
 | `FLASH` | 保持供电期间立即再次切换，无需重启——约 50 毫秒 |
+| `D7` 外接按钮 | 和 `FLASH` 一样，只是按钮在线的另一端——约 50 毫秒 |
 
 如果是三次快闪而不是一次长亮，说明没能连上主板：没有 Wi-Fi，或者 LED 板没开。
+
+### 外接按钮
+
+线那头有个按钮，比伸手去按板子方便。把一个自复位的常开按钮焊到下面任一对引脚上：
+
+```
+D7  ──[ 按钮 ]── GND     无需重启立即切换——和 FLASH 一样被轮询
+RST ──[ 按钮 ]── GND     经过一次重启做同样的事，约 2.4 秒，Wi-Fi 断了也能用
+```
+
+不用加电阻：两个引脚都由内部上拉拉高，消抖写在固件里（500 毫秒加上等待松手）。`D7` 就是
+`GPIO13`，启动时没有特殊职责，所以线想拉多长都行；`FLASH` 按键下的 `D3`/`GPIO0` 不一样，
+上电瞬间被拉到地会让 ESP8266 进入烧写模式。自锁开关两边都不能用：`RST` 一直闭合会让板子
+停在复位状态。
 
 ```bash
 cp firmware/claude_led_button/secrets.h.example firmware/claude_led_button/secrets.h

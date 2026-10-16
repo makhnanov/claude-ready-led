@@ -6,6 +6,7 @@
  *
  *   кнопка RESET — плата загружается, дёргает /toggle основной платы и остаётся в сети
  *   кнопка FLASH — мгновенный повторный /toggle, пока плата не перезагружалась
+ *   внешняя кнопка на D7 — то же, что FLASH, но без оговорок про режим прошивки
  *
  * Обратная связь синим светодиодом на самой плате (D4, горит инверсно):
  *   одна длинная вспышка  — основная плата ответила, светодиод переключён
@@ -16,15 +17,36 @@
  * LWIP_DNS_SUPPORT_MDNS_QUERIES=1). Сработавший адрес и точка доступа
  * кладутся в RTC, поэтому следующее нажатие RESET не тратит время на поиск.
  *
- * Схема: ничего припаивать не нужно, используются кнопки и светодиод платы.
+ * Схема: для работы паять нечего — хватает кнопок и светодиода самой платы.
+ * Внешняя кнопка (нормально разомкнутая, без фиксации) ставится так:
+ *
+ *   D7 ──[ кнопка ]── GND        мгновенное переключение, плата не перезагружается
+ *   RST ──[ кнопка ]── GND       то же через перезагрузку, работает даже без WiFi
+ *
+ * Подтяжка не нужна: пины подняты внутренним pull-up. На D7 (GPIO13) нет
+ * загрузочной функции, поэтому провод к нему можно тянуть спокойно — в отличие
+ * от D3 (GPIO0), который, будучи прижат к земле при включении, уводит ESP8266
+ * в режим прошивки.
  */
 
 #include <ESP8266WiFi.h>
 #include <ESP8266HTTPClient.h>
 #include "secrets.h"
 
-static const uint8_t LED_PIN    = D4;  // GPIO2, встроенный светодиод, инверсный
-static const uint8_t BUTTON_PIN = D3;  // GPIO0, кнопка FLASH, замыкает на землю
+static const uint8_t LED_PIN = D4;     // GPIO2, встроенный светодиод, инверсный
+
+// Кнопки, замыкающие пин на землю. Обрабатываются одинаково, так что внешняя
+// кнопка на D7 — полноценный дубль FLASH, а не отдельный режим.
+struct Button {
+  uint8_t     pin;
+  const char* name;
+};
+
+static const Button BUTTONS[] = {
+  { D3, "FLASH" },      // GPIO0, кнопка на самой плате
+  { D7, "D7" },         // GPIO13, внешняя кнопка: D7 -- кнопка -- GND
+};
+static const uint8_t BUTTON_COUNT = sizeof(BUTTONS) / sizeof(BUTTONS[0]);
 
 // RTC-память переживает RESET и deep sleep, но не отключение питания.
 // После переподключения платы кэш просто окажется пустым — не страшно,
@@ -174,7 +196,7 @@ void doToggle() {
 void setup() {
   pinMode(LED_PIN, OUTPUT);
   ledOff();
-  pinMode(BUTTON_PIN, INPUT_PULLUP);
+  for (uint8_t i = 0; i < BUTTON_COUNT; i++) pinMode(BUTTONS[i].pin, INPUT_PULLUP);
 
   Serial.begin(115200);
   Serial.println("\n\nclaude-led-button");
@@ -194,19 +216,23 @@ void setup() {
   doToggle();                                 // то самое, ради чего нажали RESET
 }
 
-// Плата остаётся в сети, поэтому кнопка FLASH переключает светодиод мгновенно,
+// Плата остаётся в сети, поэтому кнопки переключают светодиод мгновенно,
 // без перезагрузки и без повторного подключения к WiFi.
 void loop() {
   static uint32_t lastPress = 0;
 
-  if (digitalRead(BUTTON_PIN) == LOW && millis() - lastPress > 500) {
+  for (uint8_t i = 0; i < BUTTON_COUNT; i++) {
+    if (digitalRead(BUTTONS[i].pin) != LOW) continue;
+    if (millis() - lastPress < 500) continue;           // антидребезг, общий на все кнопки
+
     lastPress = millis();
+    Serial.printf("Кнопка %s\n", BUTTONS[i].name);
     if (WiFi.status() == WL_CONNECTED) {
       doToggle();
     } else {
       blinkLed(3, 80);
     }
-    while (digitalRead(BUTTON_PIN) == LOW) delay(10);   // ждём отпускания
+    while (digitalRead(BUTTONS[i].pin) == LOW) delay(10);   // ждём отпускания
     lastPress = millis();
   }
 

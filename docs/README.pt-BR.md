@@ -256,16 +256,33 @@ O `hotkey-xfce.sh` cobre só o XFCE. Equivalentes em outros ambientes:
 ## Botão sem fio
 
 Uma segunda NodeMCU se torna um interruptor físico para o LED: sem computador no caminho,
-só Wi-Fi e qualquer carregador USB. Nada para soldar — ela usa os botões e o LED que a
+só Wi-Fi e qualquer carregador USB. Nada precisa ser soldado: ela usa os botões e o LED que a
 placa já tem.
 
 | Botão | O que acontece |
 |---|---|
 | `RESET` | a placa inicia, envia `GET /toggle` para a placa principal e pisca uma vez — ≈2,4 s |
 | `FLASH` | alternância imediata enquanto a placa estiver energizada, sem reiniciar — ≈50 ms |
+| externo no `D7` | o mesmo que `FLASH`, mas com um botão com fio — ≈50 ms |
 
 Três piscadas rápidas em vez de uma longa significam que não alcançou a placa principal:
 sem Wi-Fi, ou a placa do LED está desligada.
+
+### Botão externo
+
+Um botão com fio é mais cômodo do que alcançar a placa. Solda-se um botão momentâneo,
+normalmente aberto, em um dos dois pares de pinos:
+
+```
+D7  ──[ botão ]── GND     alternância imediata sem reiniciar — lido como o FLASH
+RST ──[ botão ]── GND     o mesmo passando por um reinício, ≈2,4 s, até sem Wi-Fi
+```
+
+Resistor não é preciso: os dois pinos têm pull-up interno e o antirrepique está no firmware
+(500 ms mais a espera pela soltura). `D7` é o `GPIO13` e não tem papel no boot, então o fio
+pode ser longo — ao contrário do `D3`/`GPIO0` sob o botão `FLASH`, que, puxado ao terra na
+energização, joga o ESP8266 no modo de gravação. Chave com trava não serve em nenhum dos
+dois: um `RST` fechado mantém a placa em reset.
 
 ```bash
 cp firmware/claude_led_button/secrets.h.example firmware/claude_led_button/secrets.h

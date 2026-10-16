@@ -254,16 +254,34 @@ Available actions: `toggle` (default), `on`, `off`, `pulse`, `done`.
 ## Wireless button
 
 A second NodeMCU becomes a physical switch for the LED — no computer in the loop, just
-Wi-Fi and any USB charger. Nothing to solder: it uses the buttons and the LED already on
-the board.
+Wi-Fi and any USB charger. Nothing has to be soldered: it uses the buttons and the LED
+already on the board.
 
 | Button | What happens |
 |---|---|
 | `RESET` | the board boots, sends `GET /toggle` to the main board and blinks once — ≈2.4 s |
 | `FLASH` | instant repeat toggle while the board stays powered, no reboot — ≈50 ms |
+| external on `D7` | the same as `FLASH`, but from a button on a wire — ≈50 ms |
 
 Three quick blinks instead of one long one mean it could not reach the main board: no
 Wi-Fi, or the LED board is off.
+
+### External button
+
+A button on a wire beats reaching for the board. Solder a momentary, normally-open button
+to either pair of pins:
+
+```
+D7  ──[ button ]── GND     instant toggle, no reboot — polled just like FLASH
+RST ──[ button ]── GND     the same through a reboot, ≈2.4 s, works even with Wi-Fi lost
+```
+
+No resistor is needed: both pins are held high by an internal pull-up, and the debounce
+lives in the firmware (500 ms plus waiting for release). `D7` is `GPIO13` and has no
+boot-time role, so the wire to it can be as long as you like — unlike `D3`/`GPIO0` under
+the `FLASH` button, which, pulled to ground while the board powers up, drops the ESP8266
+into flash mode. A latching switch fits neither pin: a permanently closed `RST` holds the
+board in reset.
 
 ```bash
 cp firmware/claude_led_button/secrets.h.example firmware/claude_led_button/secrets.h

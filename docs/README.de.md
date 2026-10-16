@@ -258,16 +258,34 @@ Verfügbare Aktionen: `toggle` (Standard), `on`, `off`, `pulse`, `done`.
 ## Kabelloser Taster
 
 Eine zweite NodeMCU wird zum physischen Schalter für die LED — ohne Computer dazwischen,
-nur WLAN und ein beliebiges USB-Ladegerät. Nichts zu löten: sie nutzt die Taster und die
-LED, die ohnehin auf der Platine sitzen.
+nur WLAN und ein beliebiges USB-Ladegerät. Nichts muss gelötet werden: sie nutzt die
+Taster und die LED, die ohnehin auf der Platine sitzen.
 
 | Taster | Was passiert |
 |---|---|
 | `RESET` | die Platine bootet, schickt `GET /toggle` an die Hauptplatine und blinkt einmal — ≈2,4 s |
 | `FLASH` | sofortiges erneutes Umschalten, solange die Platine Strom hat, ohne Neustart — ≈50 ms |
+| extern an `D7` | dasselbe wie `FLASH`, nur mit einem Taster am Kabel — ≈50 ms |
 
 Drei schnelle Blinker statt eines langen heißen: die Hauptplatine war nicht erreichbar —
 kein WLAN, oder die LED-Platine ist aus.
+
+### Externer Taster
+
+Ein Taster am Kabel ist bequemer, als nach der Platine zu greifen. Gelötet wird ein
+tastender, normal offener Schalter an eines der beiden Pin-Paare:
+
+```
+D7  ──[ Taster ]── GND     sofortiges Umschalten ohne Neustart — wird wie FLASH abgefragt
+RST ──[ Taster ]── GND     dasselbe über einen Neustart, ≈2,4 s, auch ohne WLAN-Verbindung
+```
+
+Ein Widerstand ist nicht nötig: beide Pins hängen an einem internen Pull-up, das Entprellen
+steckt in der Firmware (500 ms plus Warten aufs Loslassen). `D7` ist `GPIO13` und hat keine
+Rolle beim Booten, die Leitung dorthin darf also beliebig lang sein — anders als
+`D3`/`GPIO0` unter dem `FLASH`-Taster, der beim Einschalten auf Masse gezogen den ESP8266
+in den Flash-Modus schickt. Ein rastender Schalter passt an keinen von beiden: ein dauerhaft
+geschlossener `RST` hält die Platine im Reset.
 
 ```bash
 cp firmware/claude_led_button/secrets.h.example firmware/claude_led_button/secrets.h

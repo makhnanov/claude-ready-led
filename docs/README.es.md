@@ -257,16 +257,34 @@ Acciones disponibles: `toggle` (por defecto), `on`, `off`, `pulse`, `done`.
 ## Botón inalámbrico
 
 Una segunda NodeMCU se convierte en un interruptor físico para el LED: sin ordenador de por
-medio, solo Wi-Fi y cualquier cargador USB. No hay que soldar nada: usa los botones y el LED
+medio, solo Wi-Fi y cualquier cargador USB. No hace falta soldar nada: usa los botones y el LED
 que la placa ya trae.
 
 | Botón | Qué ocurre |
 |---|---|
 | `RESET` | la placa arranca, envía `GET /toggle` a la placa principal y parpadea una vez — ≈2,4 s |
 | `FLASH` | conmutación inmediata mientras la placa siga alimentada, sin reiniciar — ≈50 ms |
+| externo en `D7` | lo mismo que `FLASH`, pero con un botón con cable — ≈50 ms |
 
 Tres parpadeos rápidos en lugar de uno largo significan que no alcanzó la placa principal:
 no hay Wi-Fi, o la placa del LED está apagada.
+
+### Botón externo
+
+Un botón con cable es más cómodo que estirarse hasta la placa. Se suelda un pulsador
+momentáneo, normalmente abierto, a cualquiera de los dos pares de pines:
+
+```
+D7  ──[ botón ]── GND     conmutación inmediata sin reiniciar — se lee igual que FLASH
+RST ──[ botón ]── GND     lo mismo pasando por un reinicio, ≈2,4 s, aunque no haya Wi-Fi
+```
+
+No hace falta resistencia: los dos pines van a un pull-up interno y el antirrebote está en
+el firmware (500 ms más la espera a que lo suelten). `D7` es `GPIO13` y no tiene ningún
+papel en el arranque, así que el cable puede ser largo — al contrario que `D3`/`GPIO0` bajo
+el botón `FLASH`, que puesto a masa al encender mete al ESP8266 en modo de programación. Un
+interruptor con enclavamiento no sirve en ninguno de los dos: un `RST` cerrado mantiene la
+placa en reset.
 
 ```bash
 cp firmware/claude_led_button/secrets.h.example firmware/claude_led_button/secrets.h

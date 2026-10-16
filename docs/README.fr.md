@@ -259,16 +259,34 @@ Actions disponibles : `toggle` (par défaut), `on`, `off`, `pulse`, `done`.
 ## Bouton sans fil
 
 Une deuxième NodeMCU devient un interrupteur physique pour la LED : aucun ordinateur dans la
-boucle, juste du Wi-Fi et n'importe quel chargeur USB. Rien à souder : elle se sert des
+boucle, juste du Wi-Fi et n'importe quel chargeur USB. Rien n'est obligé d'être soudé : elle se sert des
 boutons et de la LED déjà présents sur la carte.
 
 | Bouton | Ce qui se passe |
 |---|---|
 | `RESET` | la carte démarre, envoie `GET /toggle` à la carte principale et clignote une fois — ≈2,4 s |
 | `FLASH` | bascule immédiate tant que la carte reste alimentée, sans redémarrage — ≈50 ms |
+| externe sur `D7` | comme `FLASH`, mais avec un bouton au bout d'un fil — ≈50 ms |
 
 Trois clignotements rapides au lieu d'un long signifient qu'elle n'a pas joint la carte
 principale : pas de Wi-Fi, ou la carte de la LED est éteinte.
+
+### Bouton externe
+
+Un bouton au bout d'un fil est plus pratique que d'aller chercher la carte. On soude un
+bouton poussoir, normalement ouvert, sur l'une des deux paires de broches :
+
+```
+D7  ──[ bouton ]── GND     bascule immédiate sans redémarrage — lu comme FLASH
+RST ──[ bouton ]── GND     la même chose via un redémarrage, ≈2,4 s, même sans Wi-Fi
+```
+
+Aucune résistance n'est nécessaire : les deux broches sont tirées au haut en interne et
+l'anti-rebond est dans le firmware (500 ms plus l'attente du relâchement). `D7`, c'est
+`GPIO13`, sans rôle au démarrage : le fil peut donc être long, contrairement à `D3`/`GPIO0`
+sous le bouton `FLASH` qui, tiré à la masse à la mise sous tension, fait basculer l'ESP8266
+en mode programmation. Un interrupteur à verrouillage ne convient ni à l'un ni à l'autre :
+un `RST` fermé en permanence maintient la carte en reset.
 
 ```bash
 cp firmware/claude_led_button/secrets.h.example firmware/claude_led_button/secrets.h
